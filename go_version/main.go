@@ -62,25 +62,27 @@ var (
 
 	// 统计信息
 	packetCount uint64 // 总数据包数
-	uniqueMACs  = make(map[[6]byte]struct{}) // 已发现的唯一 MAC 地址
-	uniqueMu    sync.RWMutex
+	// 注意：net.HardwareAddr 是 []byte 类型，不能直接作为 map 的 key
+	// 所以我们使用 MAC 地址的字符串表示作为 key
+	uniqueMACs = make(map[string]struct{}) // 已发现的唯一 MAC 地址
+	uniqueMu   sync.RWMutex
 )
 
 // ============================================================
 // 使用说明
 // ============================================================
 
-const usage = `rsniffer - Go 版本的轻量级被动嗅探工具
+const usage = `gsniffer - Go 版本的轻量级被动嗅探工具
 
 使用方法:
-  rsniffer [全局选项] <子命令> [子命令选项]
+  gsniffer [全局选项] <子命令> [子命令选项]
 
 子命令:
   sniff     进行数据包嗅探（默认子命令，可省略）
   download  从 IEEE 官网下载 OUI 数据
 
 全局选项:
-  -cache <path>    OUI 缓存文件路径 (默认: ~/.cache/rsniffer/oui.txt)
+  -cache <path>    OUI 缓存文件路径 (默认: ~/.cache/gsniffer/oui.txt)
   -force           强制重新下载 OUI 数据（忽略缓存）
   -v, -verbose     详细输出模式
   -h, -help        显示帮助信息
@@ -94,16 +96,16 @@ download 子命令选项:
 
 示例:
   # 使用默认接口进行嗅探
-  rsniffer sniff
+  gsniffer sniff
 
   # 指定接口并显示 IP 地址
-  rsniffer sniff -i en0 -I
+  gsniffer sniff -i en0 -I
 
   # 仅下载 OUI 数据
-  rsniffer download
+  gsniffer download
 
   # 强制重新下载 OUI 并嗅探
-  rsniffer -force sniff -i eth0
+  gsniffer -force sniff -i eth0
 `
 
 // ============================================================
@@ -116,7 +118,7 @@ func getDefaultCachePath() string {
 	if err != nil {
 		return filepath.Join(".", "oui.txt")
 	}
-	return filepath.Join(home, ".cache", "rsniffer", "oui.txt")
+	return filepath.Join(home, ".cache", "gsniffer", "oui.txt")
 }
 
 // 获取默认网络接口
@@ -256,32 +258,44 @@ func parsePacket(data []byte) (srcMAC [6]byte, dstMAC [6]byte, srcIP *[4]byte, h
 
 // 处理单个数据包
 func handlePacket(packet gopacket.Packet, db *oui.Database, printIP bool) {
-	// 方法 1：使用 gopacket 的层解析
+	// 使用 gopacket 的层解析
 	ethLayer := packet.Layer(layers.LayerTypeEthernet)
 	if ethLayer == nil {
 		return
 	}
 
 	eth, _ := ethLayer.(*layers.Ethernet)
+	// 注意：eth.SrcMAC 是 net.HardwareAddr 类型，本质是 []byte
 	srcMAC := eth.SrcMAC
+
+	// 验证 MAC 地址长度
+	if len(srcMAC) != 6 {
+		return
+	}
+
+	// 将 MAC 地址转换为字符串，用于 map 的 key
+	// 注意：[]byte 不能直接作为 map 的 key，所以使用字符串表示
+	macStr := oui.MACToStringBytes(srcMAC)
 
 	// 检查是否是新的 MAC 地址
 	uniqueMu.Lock()
-	if _, exists := uniqueMACs[srcMAC]; !exists {
-		uniqueMACs[srcMAC] = struct{}{}
+	if _, exists := uniqueMACs[macStr]; !exists {
+		uniqueMACs[macStr] = struct{}{}
 		uniqueMu.Unlock()
 
-		// 查找厂商信息
-		vendor := db.Lookup(srcMAC)
-		macStr := oui.MACToString(srcMAC)
+		// 查找厂商信息（使用字节切片版本）
+		vendor := db.LookupBytes(srcMAC)
 
 		if printIP {
 			// 尝试获取 IP 地址
 			ipLayer := packet.Layer(layers.LayerTypeIPv4)
 			if ipLayer != nil {
 				ip, _ := ipLayer.(*layers.IPv4)
+				// ip.SrcIP 是 net.IP 类型，本质是 []byte
 				var srcIP [4]byte
-				copy(srcIP[:], ip.SrcIP)
+				if len(ip.SrcIP) >= 4 {
+					copy(srcIP[:], ip.SrcIP)
+				}
 				ipStr := oui.IPToString(srcIP)
 				fmt.Printf("%s @ %s -> %s\n", macStr, ipStr, vendor)
 			} else {

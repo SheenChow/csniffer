@@ -239,6 +239,28 @@ func (db *Database) Lookup(mac [6]byte) string {
 	return "Unknown Vendor"
 }
 
+// LookupBytes 根据 MAC 地址（字节切片）查找厂商名称
+//
+// 适用于 net.HardwareAddr 类型（本质是 []byte）
+//
+// 参数：
+//   - mac: MAC 地址的字节切片，长度必须为 6
+//
+// 返回：
+//   - 如果找到匹配的 OUI，返回厂商名称
+//   - 否则返回 "Unknown Vendor"（或在长度不匹配时返回 "Invalid MAC"）
+func (db *Database) LookupBytes(mac []byte) string {
+	if len(mac) != 6 {
+		return "Invalid MAC"
+	}
+
+	// 将 []byte 转换为 [6]byte
+	var macArr [6]byte
+	copy(macArr[:], mac)
+
+	return db.Lookup(macArr)
+}
+
 // Len 返回数据库中的条目数量
 func (db *Database) Len() int {
 	return len(db.entries)
@@ -253,6 +275,19 @@ func (db *Database) IsEmpty() bool {
 //
 // 输出格式: "00:11:22:33:44:55"
 func MACToString(mac [6]byte) string {
+	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x",
+		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
+}
+
+// MACToStringBytes 将 MAC 地址（字节切片）格式化为标准字符串
+//
+// 适用于 net.HardwareAddr 类型（本质是 []byte）
+//
+// 输出格式: "00:11:22:33:44:55"
+func MACToStringBytes(mac []byte) string {
+	if len(mac) != 6 {
+		return "invalid"
+	}
 	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x",
 		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
 }

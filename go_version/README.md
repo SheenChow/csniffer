@@ -1,4 +1,4 @@
-# rsniffer - Go 版本的轻量级被动嗅探器
+# gsniffer - Go 版本的轻量级被动嗅探器
 
 这是一个基于 gopacket（libpcap 的 Go 绑定）实现的轻量级被动嗅探工具，用于在局域网流量中提取源 MAC 地址，并通过 OUI 表映射出厂商信息。
 
@@ -16,7 +16,7 @@
 |------|--------|---------|
 | OUI 数据来源 | 内置静态表 | 从 IEEE 官网动态下载 |
 | OUI 更新方式 | 重新编译 | `download` 子命令或 `-force` 选项 |
-| 去重机制 | 自定义哈希表 | 标准库 `map[[6]byte]struct{}` |
+| 去重机制 | 自定义哈希表 | 标准库 `map[string]struct{}` |
 | 内存管理 | 手动管理 | Go 垃圾回收 |
 | 并发安全 | 无 | `sync.RWMutex` 保护 |
 | 子命令 | 无 | `sniff`、`download` |
@@ -43,37 +43,68 @@ sudo yum install libpcap-devel
 
 ## 编译
 
+### 第一步：下载依赖（go mod tidy）
+
+`go mod tidy` 是 Go 1.16+ 推荐的依赖管理方式，它会：
+1. 读取 `go.mod` 文件中的依赖声明
+2. 下载所有缺失的依赖包到本地缓存
+3. 更新 `go.sum` 文件（记录依赖的校验和）
+4. 移除不需要的依赖
+
 ```bash
 cd go_version
 
-# 下载依赖并编译
+# 下载并整理依赖
 go mod tidy
-go build -o rsniffer .
 ```
 
-编译后的可执行文件：`rsniffer`
+**常见问题：**
+- 如果网络较慢，可以设置 Go 代理：
+  ```bash
+  # 国内用户建议使用七牛云代理
+  export GOPROXY=https://goproxy.cn,direct
+  
+  # 或使用阿里云代理
+  export GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
+  ```
+
+### 第二步：编译
+
+```bash
+# 编译为 gsniffer
+go build -o gsniffer .
+```
+
+编译后的可执行文件：`gsniffer`
+
+### 快速编译（单步）
+
+```bash
+# 也可以一步完成（会自动下载依赖）
+go build -o gsniffer .
+```
 
 ## 测试流程
 
 ### 第一步：查看帮助信息
 
 ```bash
-./rsniffer -help
+./gsniffer -help
 ```
 
 预期输出：
 ```
-rsniffer - Go 版本的轻量级被动嗅探工具
+gsniffer - Go 版本的轻量级被动嗅探工具
 
 使用方法:
-  rsniffer [全局选项] <子命令> [子命令选项]
+  gsniffer [全局选项] <子命令> [子命令选项]
 
 子命令:
   sniff     进行数据包嗅探（默认子命令，可省略）
   download  从 IEEE 官网下载 OUI 数据
 
 全局选项:
-  -cache <path>    OUI 缓存文件路径 (默认: ~/.cache/rsniffer/oui.txt)
+  -cache <path>    OUI 缓存文件路径 (默认: ~/.cache/gsniffer/oui.txt)
   -force           强制重新下载 OUI 数据（忽略缓存）
   -v, -verbose     详细输出模式
   -h, -help        显示帮助信息
@@ -87,16 +118,16 @@ download 子命令选项:
 
 示例:
   # 使用默认接口进行嗅探
-  rsniffer sniff
+  gsniffer sniff
 
   # 指定接口并显示 IP 地址
-  rsniffer sniff -i en0 -I
+  gsniffer sniff -i en0 -I
 
   # 仅下载 OUI 数据
-  rsniffer download
+  gsniffer download
 
   # 强制重新下载 OUI 并嗅探
-  rsniffer -force sniff -i eth0
+  gsniffer -force sniff -i eth0
 ```
 
 ### 第二步：下载 OUI 数据（首次运行建议）
@@ -104,20 +135,20 @@ download 子命令选项:
 由于 OUI 数据库较大（约 5-10MB），建议首次运行先单独下载：
 
 ```bash
-./rsniffer download
+./gsniffer download
 ```
 
 预期输出：
 ```
-rsniffer - OUI 数据下载工具
+gsniffer - OUI 数据下载工具
 
 [INFO] 正在从 IEEE 网站下载 OUI 数据...
 [DEBUG] 下载地址: https://standards-oui.ieee.org/oui/oui.txt
 [INFO] 下载完成，共 5678901 字节
-[INFO] OUI 数据已缓存到: /home/user/.cache/rsniffer/oui.txt
+[INFO] OUI 数据已缓存到: /home/user/.cache/gsniffer/oui.txt
 [INFO] 解析完成，共 34567 个 OUI 条目
 
-OUI 数据已保存到: /home/user/.cache/rsniffer/oui.txt
+OUI 数据已保存到: /home/user/.cache/gsniffer/oui.txt
 共 34567 个 OUI 条目
 ```
 
@@ -127,12 +158,14 @@ OUI 数据已保存到: /home/user/.cache/rsniffer/oui.txt
 
 #### macOS
 
+根据您提供的设备信息，您的活跃接口是 `en1`：
+
 ```bash
 # 查看可用网络接口
 ifconfig
 
-# 使用 en0（通常是 Wi-Fi）或 en1（通常是以太网）进行嗅探
-sudo ./rsniffer sniff -i en0
+# 使用您的接口 en1（Wi-Fi）进行嗅探
+sudo ./gsniffer sniff -i en1
 ```
 
 #### Linux
@@ -142,7 +175,7 @@ sudo ./rsniffer sniff -i en0
 ip link show
 
 # 使用指定接口（如 eth0 或 wlan0）进行嗅探
-sudo ./rsniffer sniff -i eth0
+sudo ./gsniffer sniff -i eth0
 ```
 
 #### 使用默认接口
@@ -150,14 +183,14 @@ sudo ./rsniffer sniff -i eth0
 如果不指定 `-i` 参数，程序会自动选择第一个非回环接口：
 
 ```bash
-sudo ./rsniffer sniff
+sudo ./gsniffer sniff
 ```
 
 预期输出：
 ```
-[INFO] 使用默认网络接口: en0
+[INFO] 使用默认网络接口: en1
 [INFO] 正在加载 OUI 数据库...
-[INFO] 从缓存文件读取 OUI 数据: /home/user/.cache/rsniffer/oui.txt
+[INFO] 从缓存文件读取 OUI 数据: /home/user/.cache/gsniffer/oui.txt
 [INFO] 解析完成，共 34567 个 OUI 条目
 [INFO] OUI 数据库加载完成，共 34567 个条目
 
@@ -174,7 +207,7 @@ aa:bb:cc:dd:ee:ff -> Apple, Inc.
 使用 `-I` 或 `-print-ip` 选项可以同时显示源 IP 地址：
 
 ```bash
-sudo ./rsniffer sniff -i en0 -I
+sudo ./gsniffer sniff -i en1 -I
 ```
 
 预期输出：
@@ -204,10 +237,10 @@ OUI 数据会定期更新，使用以下命令强制下载最新版本：
 
 ```bash
 # 强制重新下载并嗅探
-sudo ./rsniffer -force sniff -i en0
+sudo ./gsniffer -force sniff -i en1
 
 # 或仅下载不嗅探
-./rsniffer -force download
+./gsniffer -force download
 ```
 
 ## 命令行选项详解
@@ -216,7 +249,7 @@ sudo ./rsniffer -force sniff -i en0
 
 | 选项 | 简写 | 说明 |
 |------|------|------|
-| `-cache <path>` | - | 指定 OUI 缓存文件路径，默认 `~/.cache/rsniffer/oui.txt` |
+| `-cache <path>` | - | 指定 OUI 缓存文件路径，默认 `~/.cache/gsniffer/oui.txt` |
 | `-force` | - | 强制重新下载 OUI 数据，忽略缓存 |
 | `-v` `-verbose` | - | 启用详细输出模式 |
 | `-h` `-help` | - | 显示帮助信息 |
@@ -285,19 +318,19 @@ aa:bb:cc:dd:ee:ff @ 192.168.1.100 -> Apple, Inc.
 
 ```bash
 # 强制重新下载
-./rsniffer -force download
+./gsniffer -force download
 ```
 
 建议每月更新一次以获取最新的厂商信息。
 
 ### Q4: OUI 缓存文件在哪里？
 
-默认位置：`~/.cache/rsniffer/oui.txt`
+默认位置：`~/.cache/gsniffer/oui.txt`
 
 可以使用 `-cache` 选项指定自定义路径：
 
 ```bash
-./rsniffer -cache /tmp/oui.txt download
+./gsniffer -cache /tmp/oui.txt download
 ```
 
 ### Q5: 编译时找不到 libpcap？
@@ -314,9 +347,24 @@ brew install libpcap
 sudo apt install libpcap-dev
 ```
 
+### Q6: go mod tidy 下载依赖慢怎么办？
+
+可以设置 Go 代理：
+
+```bash
+# 国内用户建议使用七牛云代理
+export GOPROXY=https://goproxy.cn,direct
+
+# 或使用阿里云代理
+export GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
+
+# 然后重新下载依赖
+go mod tidy
+```
+
 ## 与 C 版本功能对比
 
-| 功能 | C 版本 (csniffer) | Go 版本 (rsniffer) |
+| 功能 | C 版本 (csniffer) | Go 版本 (gsniffer) |
 |------|-------------------|---------------------|
 | 捕获以太网数据包 | ✅ | ✅ |
 | 提取源 MAC 地址 | ✅ | ✅ |
@@ -335,6 +383,7 @@ sudo apt install libpcap-dev
 ```
 go_version/
 ├── go.mod           # Go 模块定义
+├── go.sum           # 依赖校验和（go mod tidy 自动生成）
 ├── main.go          # 主程序入口
 ├── oui/
 │   └── oui.go       # OUI 下载和解析模块
