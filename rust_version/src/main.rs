@@ -114,7 +114,7 @@ fn get_default_interface() -> Result<String> {
 
     devices
         .iter()
-        .find(|d| !d.is_loopback())
+        .find(|d| !d.flags.contains(pcap::DeviceFlags::LOOPBACK))
         .or_else(|| devices.first())
         .map(|d| d.name.clone())
         .with_context(|| "未找到可用的网络接口")
