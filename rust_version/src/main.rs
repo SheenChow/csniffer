@@ -112,9 +112,11 @@ fn get_default_interface() -> Result<String> {
     let devices = pcap::Device::list()
         .with_context(|| "无法获取网络设备列表")?;
 
+    // 尝试找到第一个非回环接口
+    // 回环接口通常命名为 "lo" (Linux) 或 "lo0" (macOS)
     devices
         .iter()
-        .find(|d| !d.flags.contains(pcap::DeviceFlags::LOOPBACK))
+        .find(|d| d.name != "lo" && d.name != "lo0")
         .or_else(|| devices.first())
         .map(|d| d.name.clone())
         .with_context(|| "未找到可用的网络接口")
