@@ -62,11 +62,36 @@ impl OuiDatabase {
         log::debug!("下载地址: {}", IEEE_OUI_URL);
 
         // 使用 reqwest 的 blocking API 下载
-        let response = reqwest::blocking::get(IEEE_OUI_URL)
+        // 注意：IEEE 网站有反爬虫策略，需要模拟真实浏览器请求
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .with_context(|| "无法创建 HTTP 客户端")?;
+
+        let response = client.get(IEEE_OUI_URL)
+            // 添加浏览器 headers（模拟 Chrome 浏览器）
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+            .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+            .header("Cache-Control", "max-age=0")
+            .header("Connection", "keep-alive")
+            .header("Referer", "https://www.google.com/")
+            .header("Sec-Fetch-Dest", "document")
+            .header("Sec-Fetch-Mode", "navigate")
+            .header("Sec-Fetch-Site", "cross-site")
+            .header("Sec-Fetch-User", "?1")
+            .header("Upgrade-Insecure-Requests", "1")
+            // 模拟 Chrome 浏览器的 User-Agent
+            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
+            // 添加 sec-ch-ua 系列 headers
+            .header("sec-ch-ua", r#""Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147""#)
+            .header("sec-ch-ua-mobile", "?0")
+            .header("sec-ch-ua-platform", r#""macOS""#)
+            .send()
             .with_context(|| "无法连接到 IEEE OUI 服务器")?;
 
         let status = response.status();
-        if !status.is_success() {
+        // 允许 200 (OK) 和 304 (Not Modified)
+        if !status.is_success() && status.as_u16() != 304 {
             anyhow::bail!("HTTP 请求失败，状态码: {}", status);
         }
 

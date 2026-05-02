@@ -71,16 +71,49 @@ func DownloadFromIEEE(cachePath string) (string, error) {
 		Timeout: 60 * time.Second,
 	}
 
-	// 发送 GET 请求
-	resp, err := client.Get(IEEEOUIURL)
+	// 创建请求，添加完整的浏览器 headers
+	// 注意：IEEE 网站有反爬虫策略，需要模拟真实浏览器请求
+	req, err := http.NewRequest("GET", IEEEOUIURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("无法创建 HTTP 请求: %w", err)
+	}
+
+	// 添加浏览器 headers（模拟 Chrome 浏览器）
+	// 参考用户提供的 curl 命令
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+	req.Header.Set("Cache-Control", "max-age=0")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Referer", "https://www.google.com/")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	// 模拟 Chrome 浏览器的 User-Agent
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
+	// 添加 sec-ch-ua 系列 headers
+	req.Header.Set("sec-ch-ua", `"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"`)
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", `"macOS"`)
+
+	// 发送请求
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("无法连接到 IEEE OUI 服务器: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// 检查 HTTP 状态码
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP 请求失败，状态码: %d", resp.StatusCode)
+	// 允许 200 (OK) 和 304 (Not Modified)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {
+		// 读取错误响应体，提供更详细的错误信息
+		errBody, _ := io.ReadAll(resp.Body)
+		errMsg := string(errBody)
+		if len(errMsg) > 200 {
+			errMsg = errMsg[:200] + "..."
+		}
+		return "", fmt.Errorf("HTTP 请求失败，状态码: %d\n响应内容: %s", resp.StatusCode, errMsg)
 	}
 
 	// 读取响应内容
