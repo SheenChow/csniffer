@@ -1,0 +1,30 @@
+[package]
+name = "rsniffer"
+version = "1.0.0"
+edition = "2021"
+description = "A lightweight passive sniffer based on libpcap, extracting MAC addresses and mapping to vendor info via OUI table"
+license = "BSD-2-Clause"
+
+[dependencies]
+# 数据包捕获库
+pcap = "1.1"
+
+# 以太网/IP 协议解析
+etherparse = "0.14"
+
+# HTTP 客户端（用于下载 OUI 文件）
+reqwest = { version = "0.12", features = ["blocking"] }
+
+# 命令行参数解析
+clap = { version = "4.5", features = ["derive"] }
+
+# 错误处理
+thiserror = "1.0"
+anyhow = "1.0"
+
+# 信号处理（用于 Ctrl+C 优雅退出）
+ctrlc = "3.4"
+
+# 日志
+log = "0.4"
+env_logger = "0.11"
